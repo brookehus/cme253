@@ -1,0 +1,45 @@
+
+The following directory contains four scripts, five input files, one pdf report, and two pdf profiler images.
+
+Input files:
+
+arg1      : Example protein file (PDB)
+arg2      :    3-pose ligand file
+arg2_10   :   10-pose ligand file
+arg2_100  :  100-pose ligand file
+arg2_1k   : 1000-pose ligand file
+
+Scripts:
+
+kernel.cu : CUDA implementation 1
+smem.cu   : CUDA implementation 2 (SMEM)
+red.cu    : CUDA implementation 3a (reduction with SMEM, 16x16x4 threads)
+red18.cu  : CUDA implementation 3b (reduction with SMEM, 18x18x3 threads)
+
+All scripts contain a baseline cpp implementation.
+
+To compile, run (e.g.):
+
+$ nvcc -std=c++11  kernel.cu -o kernel
+
+Note that debug.h must be in the current directory. It has been provided.
+
+An example command uses arg1 and any of the arg2 files, e.g.,
+
+$ ./kernel arg1 arg2
+
+This will produce an output that looks like this:
+
+Lines in protein file : 4573
+Lines in ligand file : 51
+Ligand poses in file : 3
+Number of distances to compute : 233223
+Cpp distances calculated in 113899 microseconds
+Using GPU 0: GRID K520
+Ready to launch kernel
+CUDA distances calculated in: 1915 microseconds
+
+It will also output a distances.txt file with two columns where the first column has the cpp distancs and the second column has the CUDA distances.
+
+All scripts perform the same cpp implementation, but the CUDA implementation depends on the script.
+

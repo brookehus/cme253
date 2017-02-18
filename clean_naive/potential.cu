@@ -158,12 +158,7 @@ __global__ void cuContacts(double *pxyz, double *lxyz, double *cudists, int *ple
              + (pxyz[pidx*3+2]-lxyz[lidx*3+2])*(pxyz[pidx*3+2]-lxyz[lidx*3+2])  )/10. );
 
       
-      cudists[pidx+plength[0]*lidx] = 
-                   sqrt(-1*(4.0*1.5*(pow(1.2/dist,11) - pow(1.2/dist,6)) +
-                   4.0*1.4*(pow(0.9/dist,13) - pow(0.9/dist,6)) +
-                   4.0*0.95*(pow(1.12/dist,12) - pow(1.12/dist, 7))) *
-                  (4.0*pow(1.05/dist,12) - pow(1.05/dist,6))
-                   *-1*sqrt(1.1/pow(dist,2.1)));
+      cudists[pidx+plength[0]*lidx] = 4*1.2*(pow(0.9/dist,12) - pow(0.9/dist,6));
 
 
   }  
