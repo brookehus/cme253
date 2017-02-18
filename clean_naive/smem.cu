@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iostream>
 #include <math.h>
+#include <string>
 #include <vector>
 #include <chrono>
 
@@ -23,8 +24,8 @@
 #define CUDA_CHECK() 
 #endif
 
-#define THREADS_PER_BLOCK_X 32
-#define THREADS_PER_BLOCK_Y 32
+#define THREADS_PER_BLOCK_X  32
+#define THREADS_PER_BLOCK_Y  32
 
 typedef std::chrono::high_resolution_clock Clock;
 
@@ -108,7 +109,6 @@ void LigandTrajSetup(std::string ligand_inputfile,
     std::cout << "Ligand poses in file : " << lig_atomnums.size()/17 << std::endl; //all our ligands have 17 atoms
 }
 
-
 /* simple squared distance */
 double ComputeSquaredDistance(std::vector<double> v1, std::vector<double> v2){
     double dist_squared;
@@ -136,7 +136,7 @@ std::vector<double> LPContactFeaturizer(std::vector<int>& prot_atomnums,
     return all_distances;
 }
 
-/* cuda contact featurizer */
+/* version without SMEM
 __global__ void cuContacts(double *pxyz, double *lxyz, double *cudists, int *plength, int *llength)
 {
   int pidx = threadIdx.x + blockIdx.x * blockDim.x;
@@ -151,6 +151,29 @@ __global__ void cuContacts(double *pxyz, double *lxyz, double *cudists, int *ple
   }  
   __syncthreads();
 
+}
+*/
+
+/* cuda contact featurizer with SMEM */
+__global__ void cuContactsSMEM(double *pxyz, double *lxyz, double *cudists, int *plength, int *llength)
+{
+  int pidx = threadIdx.x + blockIdx.x * blockDim.x;
+  int lidx = threadIdx.y + blockIdx.y * blockDim.y;
+
+  __shared__ double temp[THREADS_PER_BLOCK_X][THREADS_PER_BLOCK_Y+1];
+
+  if ( (pidx < plength[0]) && (lidx< llength[0])){
+    temp[threadIdx.x][threadIdx.y] = ( sqrt(
+               (pxyz[pidx*3]-lxyz[lidx*3])*(pxyz[pidx*3]-lxyz[lidx*3])
+             + (pxyz[pidx*3+1]-lxyz[lidx*3+1])*(pxyz[pidx*3+1]-lxyz[lidx*3+1])
+             + (pxyz[pidx*3+2]-lxyz[lidx*3+2])*(pxyz[pidx*3+2]-lxyz[lidx*3+2])  )/10. );
+
+  }  
+  __syncthreads();
+
+  if ( (pidx < plength[0]) && (lidx< llength[0])){
+    cudists[pidx+plength[0]*lidx] = temp[threadIdx.x][threadIdx.y];
+  }
 }
 
 int main(int argc, char *argv[])
@@ -188,7 +211,7 @@ int main(int argc, char *argv[])
 
   auto cpp_start = Clock::now();
 
-  /* compute distances using cpp*/
+  /* compute distanes using cpp*/
   std::vector<double> distances = LPContactFeaturizer(prot_atomnums,
                                                       prot_xyz_coords,
                                                       lig_trajnums,
@@ -280,8 +303,8 @@ int main(int argc, char *argv[])
 
   auto cuda_start = Clock::now();
 
-  /* launch the kernel on the GPU */
-  cuContacts<<< blocks, threads >>>( d_pxyz, d_lxyz, d_cudists, d_plength, d_llength );
+/* launch the kernel on the GPU */
+  cuContactsSMEM<<< blocks, threads >>>( d_pxyz, d_lxyz, d_cudists, d_plength, d_llength );
   checkKERNEL();
 
   auto cuda_mid = Clock::now();
@@ -304,7 +327,7 @@ int main(int argc, char *argv[])
               << std::chrono::duration_cast<std::chrono::microseconds>(cuda_end - cuda_start).count()
               << " microseconds" << std::endl;
 
-  /* print out distance pairs to file */
+  /* print out distance pairs to a file */
   std::ofstream f("distances.txt");
   if(f.is_open()){
     for(unsigned int k = 0; k < distances.size(); k++){
